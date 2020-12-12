@@ -1,0 +1,340 @@
+From c0766abbe0a8d758bafbad9acb69561cb11b53fe Mon Sep 17 00:00:00 2001
+From: Jakob Perry <japerry007@gmail.com>
+Date: Sun, 8 Nov 2020 22:17:06 -0800
+Subject: [PATCH] 3181155
+
+---
+ composer.json                                 |  7 ++++++-
+ search_api_solr.info.yml                      |  2 +-
+ search_api_solr.module                        |  4 ++--
+ .../search_api_solr_defaults.info.yml         |  2 +-
+ .../src/Tests/IntegrationTest.php             | 13 ++++++++----
+ src/Form/SolrConfigForm.php                   |  2 +-
+ src/Plugin/Derivative/DevelLocalTask.php      | 16 +++++++--------
+ .../backend/SearchApiSolrBackend.php          | 20 +++++++++++--------
+ src/SolrConnectorInterface.php                |  3 +--
+ .../search_api_solr_test.info.yml             |  2 +-
+ .../search_api_solr_test_facets.info.yml      |  2 +-
+ 11 files changed, 43 insertions(+), 30 deletions(-)
+
+diff --git a/composer.json b/composer.json
+index 1e0d08d0..4b4fdfc7 100644
+--- a/composer.json
++++ b/composer.json
+@@ -20,7 +20,7 @@
+         "source": "http://git.drupal.org/project/search_api_solr.git"
+     },
+     "require": {
+-        "solarium/solarium": "3.8.*",
++        "solarium/solarium": "3.x-dev",
+         "drupal/search_api": "~1.3"
+     },
+     "require-dev": {
+@@ -30,6 +30,11 @@
+         "drupal/search_api_autocomplete": "1.x-dev",
+         "drupal/search_api_location": "1.x-dev"
+     },
++    "extra": {
++        "branch-alias": {
++            "dev-8.x-1.x": "1.x-dev"
++        }
++    },
+     "suggest": {
+         "drupal/facets": "Provides facetted search.",
+         "drupal/search_api_solr_multilingual": "Highly recommended if installation is multilingual or uses a language different than English."
+diff --git a/search_api_solr.info.yml b/search_api_solr.info.yml
+index bb9a61b2..0311240a 100644
+--- a/search_api_solr.info.yml
++++ b/search_api_solr.info.yml
+@@ -1,7 +1,7 @@
+ type: module
+ name: 'Solr search'
+ description: 'Offers an implementation of the Search API that uses an Apache Solr server for indexing content.'
+-core: 8.x
++core_version_requirement: ^8.8 || ^9
+ package: Search
+ dependencies:
+  - search_api
+diff --git a/search_api_solr.module b/search_api_solr.module
+index 19ef9018..09ce6274 100644
+--- a/search_api_solr.module
++++ b/search_api_solr.module
+@@ -24,7 +24,7 @@ function search_api_solr_help($route_name, RouteMatchInterface $route_match) {
+     foreach ($reqs as $req) {
+       if (isset($req['description'])) {
+         $type = $req['severity'] == REQUIREMENT_ERROR ? 'error' : ($req['severity'] == REQUIREMENT_WARNING ? 'warning' : 'status');
+-        drupal_set_message($req['description'], $type);
++        \Drupal::messenger()->addMessage($req['description'], $type);
+       }
+     }
+   }
+@@ -160,7 +160,7 @@ function search_api_solr_form_search_api_index_form_validate_server(&$element, F
+         else {
+           // Allow editing existing multiple indexes on one server for backward
+           // compatibility.
+-          drupal_set_message($msg, 'error');
++          \Drupal::messenger()->addError($msg);
+         }
+       }
+     }
+diff --git a/search_api_solr_defaults/search_api_solr_defaults.info.yml b/search_api_solr_defaults/search_api_solr_defaults.info.yml
+index 77d2eece..68ed56ec 100644
+--- a/search_api_solr_defaults/search_api_solr_defaults.info.yml
++++ b/search_api_solr_defaults/search_api_solr_defaults.info.yml
+@@ -2,7 +2,7 @@ type: module
+ name: 'Solr Search Defaults'
+ description: 'Enable this module for a best-practice default setup of Search API with the Solr backend. After installation it is recommended to uninstall this module again for performance reasons. The provided configuration will not be removed.'
+ package: Search
+-core: 8.x
++core_version_requirement: ^8.8 || ^9
+ dependencies:
+   - drupal:comment
+   - drupal:text
+diff --git a/search_api_solr_defaults/src/Tests/IntegrationTest.php b/search_api_solr_defaults/src/Tests/IntegrationTest.php
+index 29fb2c8b..c4cbfe17 100644
+--- a/search_api_solr_defaults/src/Tests/IntegrationTest.php
++++ b/search_api_solr_defaults/src/Tests/IntegrationTest.php
+@@ -4,20 +4,25 @@ namespace Drupal\search_api_solr_defaults\Tests;
+ 
+ use Drupal\comment\Tests\CommentTestTrait;
+ use Drupal\Core\StringTranslation\StringTranslationTrait;
+-use Drupal\field\Tests\EntityReference\EntityReferenceTestTrait;
++use Drupal\Tests\field\Traits\EntityReferenceTestTrait;
+ use Drupal\search_api\Entity\Index;
+ use Drupal\search_api\Entity\Server;
+-use Drupal\simpletest\WebTestBase;
++use Drupal\Tests\BrowserTestBase;
+ 
+ /**
+  * Tests the correct installation of the default configs.
+  *
+  * @group search_api_solr
+  */
+-class IntegrationTest extends WebTestBase {
++class IntegrationTest extends BrowserTestBase {
+ 
+   use StringTranslationTrait, CommentTestTrait, EntityReferenceTestTrait;
+ 
++  /**
++   * {@inheritdoc}
++   */
++  protected $defaultTheme = 'stark';
++
+   /**
+    * The profile to install as a basis for testing.
+    *
+@@ -42,7 +47,7 @@ class IntegrationTest extends WebTestBase {
+   /**
+    * {@inheritdoc}
+    */
+-  public function setUp() {
++  protected function setUp() {
+     parent::setUp();
+ 
+     // Create user with content access permission to see if the view is
+diff --git a/src/Form/SolrConfigForm.php b/src/Form/SolrConfigForm.php
+index 46d6cd09..e55b945c 100644
+--- a/src/Form/SolrConfigForm.php
++++ b/src/Form/SolrConfigForm.php
+@@ -93,7 +93,7 @@ class SolrConfigForm extends FormBase {
+    *   The access result.
+    */
+   public function access(ServerInterface $search_api_server) {
+-    return AccessResult::allowedIf($search_api_server->hasValidBackend() && $search_api_server->getBackend() instanceof SearchApiSolrBackend)->cacheUntilEntityChanges($search_api_server);
++    return AccessResult::allowedIf($search_api_server->hasValidBackend() && $search_api_server->getBackend() instanceof SearchApiSolrBackend)->addCacheableDependency($search_api_server);
+   }
+ 
+ }
+diff --git a/src/Plugin/Derivative/DevelLocalTask.php b/src/Plugin/Derivative/DevelLocalTask.php
+index 07b6ac0a..8970a078 100644
+--- a/src/Plugin/Derivative/DevelLocalTask.php
++++ b/src/Plugin/Derivative/DevelLocalTask.php
+@@ -3,7 +3,7 @@
+ namespace Drupal\search_api_solr\Plugin\Derivative;
+ 
+ use Drupal\Component\Plugin\Derivative\DeriverBase;
+-use Drupal\Core\Entity\EntityManagerInterface;
++use Drupal\Core\Entity\EntityTypeManager;
+ use Drupal\Core\Plugin\Discovery\ContainerDeriverInterface;
+ use Drupal\Core\StringTranslation\StringTranslationTrait;
+ use Drupal\Core\StringTranslation\TranslationInterface;
+@@ -19,20 +19,20 @@ class DevelLocalTask extends DeriverBase implements ContainerDeriverInterface {
+   /**
+    * The entity manager.
+    *
+-   * @var \Drupal\Core\Entity\EntityManagerInterface
++   * @var \Drupal\Core\Entity\EntityTypeManager
+    */
+-  protected $entityManager;
++  protected $entityTypeManager;
+ 
+   /**
+    * Creates an DevelLocalTask object.
+    *
+-   * @param \Drupal\Core\Entity\EntityManagerInterface $entity_manager
++   * @param \Drupal\Core\Entity\EntityTypeManager $entity_type_manager
+    *   The entity manager.
+    * @param \Drupal\Core\StringTranslation\TranslationInterface $string_translation
+    *   The translation manager.
+    */
+-  public function __construct(EntityManagerInterface $entity_manager, TranslationInterface $string_translation) {
+-    $this->entityManager = $entity_manager;
++  public function __construct(EntityTypeManager $entity_type_manager, TranslationInterface $string_translation) {
++    $this->entityTypeManager = $entity_type_manager;
+     $this->stringTranslation = $string_translation;
+   }
+ 
+@@ -41,7 +41,7 @@ class DevelLocalTask extends DeriverBase implements ContainerDeriverInterface {
+    */
+   public static function create(ContainerInterface $container, $base_plugin_id) {
+     return new static(
+-      $container->get('entity.manager'),
++      $container->get('entity_type.manager'),
+       $container->get('string_translation')
+     );
+   }
+@@ -52,7 +52,7 @@ class DevelLocalTask extends DeriverBase implements ContainerDeriverInterface {
+   public function getDerivativeDefinitions($base_plugin_definition) {
+     $this->derivatives = array();
+ 
+-    foreach ($this->entityManager->getDefinitions() as $entity_type_id => $entity_type) {
++    foreach ($this->entityTypeManager->getDefinitions() as $entity_type_id => $entity_type) {
+ 
+       if ($entity_type->hasLinkTemplate('devel-solr')) {
+         $this->derivatives["$entity_type_id.devel_solr_tab"] = array(
+diff --git a/src/Plugin/search_api/backend/SearchApiSolrBackend.php b/src/Plugin/search_api/backend/SearchApiSolrBackend.php
+index 1043919b..ae1f3ce1 100644
+--- a/src/Plugin/search_api/backend/SearchApiSolrBackend.php
++++ b/src/Plugin/search_api/backend/SearchApiSolrBackend.php
+@@ -14,10 +14,12 @@ use Drupal\Core\Form\FormStateInterface;
+ use Drupal\Core\Form\SubformState;
+ use Drupal\Core\Language\LanguageInterface;
+ use Drupal\Core\Language\LanguageManagerInterface;
++use Drupal\Core\Plugin\PluginDependencyTrait;
+ use Drupal\Core\Plugin\PluginFormInterface;
+ use Drupal\Core\TypedData\ComplexDataDefinitionInterface;
+ use Drupal\Core\TypedData\DataDefinition;
+ use Drupal\Core\Url;
++use Drupal\datetime\Plugin\Field\FieldType\DateTimeItemInterface;
+ use Drupal\search_api\Item\Field;
+ use Drupal\search_api\Item\FieldInterface;
+ use Drupal\search_api\Item\ItemInterface;
+@@ -70,6 +72,8 @@ define('SEARCH_API_ID_FIELD_NAME', 'ss_search_api_id');
+  */
+ class SearchApiSolrBackend extends BackendPluginBase implements SolrBackendInterface, PluginFormInterface {
+ 
++  use PluginDependencyTrait;
++
+   use PluginFormTrait {
+     submitConfigurationForm as traitSubmitConfigurationForm;
+   }
+@@ -181,7 +185,7 @@ class SearchApiSolrBackend extends BackendPluginBase implements SolrBackendInter
+    * {@inheritdoc}
+    */
+   public function buildConfigurationForm(array $form, FormStateInterface $form_state) {
+-    drupal_set_message($this->t('Search API Solr 8.x-1.x support ends 2020-12-31. Ensure to upgrade to 8.x-3.x or newer.'), 'warning');
++    $this->messenger()->addWarning('Search API Solr 8.x-1.x support ends 2020-12-31. Ensure to upgrade to 8.x-3.x or newer.');
+ 
+     if (!$this->server->isNew()) {
+       // Editing this server.
+@@ -321,7 +325,7 @@ class SearchApiSolrBackend extends BackendPluginBase implements SolrBackendInter
+       if ($connector instanceof PluginFormInterface) {
+         $form_state->set('connector', $connector_id);
+         if ($form_state->isRebuilding()) {
+-          drupal_set_message($this->t('Please configure the selected Solr connector.'), 'warning');
++          $this->messenger()->addWarning('Please configure the selected Solr connector.');
+         }
+         // Attach the Solr connector plugin configuration form.
+         $connector_form_state = SubformState::createForSubform($form['connector_config'], $form, $form_state);
+@@ -586,14 +590,14 @@ class SearchApiSolrBackend extends BackendPluginBase implements SolrBackendInter
+             $status = 'ok';
+             if (empty($this->configuration['skip_schema_check'])) {
+               if (substr($stats_summary['@schema_version'], 0, 10) == 'search-api') {
+-                drupal_set_message($this->t('Your schema.xml version is too old. Please replace all configuration files with the ones packaged with this module and re-index you data.'), 'error');
++                $this->messenger()->addError('Your schema.xml version is too old. Please replace all configuration files with the ones packaged with this module and re-index you data.');
+                 $status = 'error';
+               }
+               elseif (!preg_match('/drupal-[' . SEARCH_API_SOLR_MIN_SCHEMA_VERSION . '-9]\./', $stats_summary['@schema_version'])) {
+                 $variables['@url'] = Url::fromUri('internal:/' . drupal_get_path('module', 'search_api_solr') . '/INSTALL.txt')
+                   ->toString();
+                 $message = $this->t('You are using an incompatible schema.xml configuration file. Please follow the instructions in the <a href="@url">INSTALL.txt</a> file for setting up Solr.', $variables);
+-                drupal_set_message($message, 'error');
++                $this->messenger()->addError($message);
+                 $status = 'error';
+               }
+             }
+@@ -800,7 +804,7 @@ class SearchApiSolrBackend extends BackendPluginBase implements SolrBackendInter
+             // 32 characters should be enough for sorting and it makes no sense
+             // to heavily increase the index size. The DB backend limits the
+             // sort strings to 32 characters, too.
+-            if ($first_value instanceof TextValue && Unicode::strlen($first_value->getText()) > 32) {
++            if ($first_value instanceof TextValue && mb_strlen($first_value->getText()) > 32) {
+               $first_value = new TextValue(Unicode::truncate($first_value->getText(), 32));
+             }
+             if (strpos($field_names[$name], 't') === 0 || strpos($field_names[$name], 's') === 0) {
+@@ -1920,7 +1924,7 @@ class SearchApiSolrBackend extends BackendPluginBase implements SolrBackendInter
+    * @return bool|string
+    */
+   protected function formatDate($input) {
+-    $input = is_numeric($input) ? (int) $input : new \DateTime($input, timezone_open(DATETIME_STORAGE_TIMEZONE));
++    $input = is_numeric($input) ? (int) $input : new \DateTime($input, timezone_open(DateTimeItemInterface::STORAGE_TIMEZONE));
+     return $this->getSolrConnector()->getQueryHelper()->formatDate($input);
+   }
+ 
+@@ -2090,8 +2094,8 @@ class SearchApiSolrBackend extends BackendPluginBase implements SolrBackendInter
+ 
+         // Make the input lowercase as the indexed data is (usually) also all
+         // lowercase.
+-        $incomplete_key = Unicode::strtolower($incomplete_key);
+-        $user_input = Unicode::strtolower($user_input);
++        $incomplete_key = mb_strtolower($incomplete_key);
++        $user_input = mb_strtolower($user_input);
+ 
+         $solarium_query->setFields($fl);
+         $solarium_query->setPrefix($incomplete_key);
+diff --git a/src/SolrConnectorInterface.php b/src/SolrConnectorInterface.php
+index abd8d1d8..079f8cda 100644
+--- a/src/SolrConnectorInterface.php
++++ b/src/SolrConnectorInterface.php
+@@ -2,7 +2,6 @@
+ 
+ namespace Drupal\search_api_solr;
+ 
+-use Drupal\Component\Plugin\ConfigurablePluginInterface;
+ use Solarium\Core\Client\Endpoint;
+ use Solarium\Core\Client\Request;
+ use Solarium\Core\Client\Response;
+@@ -14,7 +13,7 @@ use Solarium\QueryType\Select\Query\Query;
+ /**
+  *
+  */
+-interface SolrConnectorInterface extends ConfigurablePluginInterface {
++interface SolrConnectorInterface {
+ 
+   /**
+    * Returns a link to the Solr server.
+diff --git a/tests/modules/search_api_solr_test/search_api_solr_test.info.yml b/tests/modules/search_api_solr_test/search_api_solr_test.info.yml
+index e984f11e..6ae70b9a 100644
+--- a/tests/modules/search_api_solr_test/search_api_solr_test.info.yml
++++ b/tests/modules/search_api_solr_test/search_api_solr_test.info.yml
+@@ -5,5 +5,5 @@ package: 'Search API'
+ dependencies:
+   - search_api_test_example_content
+   - search_api_solr
+-core: 8.x
++core_version_requirement: ^8.8 || ^9
+ hidden: true
+diff --git a/tests/modules/search_api_solr_test_facets/search_api_solr_test_facets.info.yml b/tests/modules/search_api_solr_test_facets/search_api_solr_test_facets.info.yml
+index 2565e330..665e4add 100644
+--- a/tests/modules/search_api_solr_test_facets/search_api_solr_test_facets.info.yml
++++ b/tests/modules/search_api_solr_test_facets/search_api_solr_test_facets.info.yml
+@@ -8,5 +8,5 @@ dependencies:
+   - drupal:taxonomy
+   - drupal:views
+   - facets
+-core: 8.x
++core_version_requirement: ^8.8 || ^9
+ hidden: true
+-- 
+2.27.0
+

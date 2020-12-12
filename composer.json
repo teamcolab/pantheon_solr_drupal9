@@ -1,0 +1,12 @@
+{
+    "name": "taoti/pantheon_solr_drupal9",
+    "description": "Modified search_api_solr and search_api_pantheon Drupal modules for Drupal 9.",
+    "type": "drupal-module",
+    "homepage": "https://github.com/taoti/pantheon_solr_drupal9",
+    "license": "GPL-2.0+",
+    "authors": [],
+    "require": {
+        "solarium/solarium": "3.x-dev",
+        "drupal/search_api": "~1.3"
+    }
+}
