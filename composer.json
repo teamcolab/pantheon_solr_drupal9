@@ -6,7 +6,7 @@
     "license": "GPL-2.0+",
     "authors": [],
     "require": {
-        "solarium/solarium": "3.x-dev",
+        "solarium/solarium": "^6.0.4|^6.1.0",
         "drupal/search_api": "~1.3"
     }
 }
