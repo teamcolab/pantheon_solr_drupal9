@@ -1,5 +1,5 @@
 {
-    "name": "taoti/pantheon_solr_drupal9",
+    "name": "teamcolab/pantheon_solr_drupal9",
     "description": "Modified search_api_solr and search_api_pantheon Drupal modules for Drupal 9.",
     "type": "drupal-module",
     "homepage": "https://github.com/taoti/pantheon_solr_drupal9",
